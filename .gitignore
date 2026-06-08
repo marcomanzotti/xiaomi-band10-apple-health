@@ -9,6 +9,7 @@ sleep_export.json
 .env
 *.token
 mi_credentials*
+.mi_session.json
 
 # Captured traffic — contains real serviceToken / personal data
 fetcher/capture/
