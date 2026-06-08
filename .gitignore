@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+probe_report.json
+sleep_export.json
+
+# Secrets — never commit credentials or tokens
+.env
+*.token
+mi_credentials*
+
+# macOS
+.DS_Store
+
+# Xcode
+ios/**/xcuserdata/
+ios/**/DerivedData/
+ios/**/*.xcuserstate
+build/

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Questa app legge i dati del sonno solo per evitare duplicati durante l'importazione.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Questa app scrive in Apple Health i dati dettagliati del sonno (fasi, frequenza cardiaca, SpO2, HRV, respirazione) esportati dalla tua banda Xiaomi.</string>
+</dict>
+</plist>
