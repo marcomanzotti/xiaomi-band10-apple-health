@@ -31,20 +31,34 @@ Xiaomi cloud ──(fetcher, Python)──▶ sleep_export.json ──(iOS app)�
 
 | Part | State |
 |------|-------|
-| iOS HealthKit writer (SwiftUI) | ✅ builds & works; testable now with `sample_sleep.json` |
-| Xiaomi login (password flow) | ⚠️ reaches `securityStatus 16` (identity verification) — see below |
-| Sleep-data endpoint discovery | 🚧 probe scaffolding ready; endpoint not yet confirmed |
+| iOS HealthKit writer (SwiftUI) | ✅ builds & runs on device; testable now with `sample_sleep.json` |
+| Xiaomi cloud endpoint | ✅ **confirmed via live capture** (see below) |
+| Xiaomi login | ⚠️ `securityStatus 16` (identity verification) — set a Xiaomi password |
+| Decrypt + replicate sleep request | 🚧 next: get `ssecurity` from login, then `decrypt_capture.py` |
+
+### What the traffic capture revealed
+
+A live mitmproxy capture of **Mi Fitness 3.49.0 (iOS)** syncing the Band 10
+(region `de`) showed — with **no certificate pinning**:
+
+- Health data lives on the **regional** host `de.hlth.io.mi.com`.
+- Sleep + vitals come from
+  `POST /app/v1/data/get_fitness_data_by_watermark`.
+- Auth is a **`serviceToken` cookie**; the request `data` field and the
+  response body are **RC4-encrypted** (key = `ssecurity` + per-request `_nonce`).
+- `ssecurity` is **not** in the traffic — it only comes from a full login.
 
 ### The Xiaomi auth wall
 
 The modern Mi Account login (vendored from
 [huami-token](https://codeberg.org/argrento/huami-token/), MIT) accepts the
-password but then returns `securityStatus: 16` with a `notificationUrl` —
-Xiaomi's identity-verification step. Accounts created via **Google/Facebook
-sign-in have no Xiaomi password**, so you must first set a password at
-[account.xiaomi.com](https://account.xiaomi.com) and complete the verification.
-Capturing Mi Fitness's real traffic with mitmproxy is the reliable fallback for
-discovering the exact sleep endpoint (see `fetcher/scripts/`).
+password but returns `securityStatus: 16` with a `notificationUrl` — Xiaomi's
+identity-verification step. Accounts that sign in via **Google/Facebook have no
+Xiaomi password**, so set one at [account.xiaomi.com](https://account.xiaomi.com)
+(you can keep using Google in the app). Once login succeeds you get `ssecurity`;
+then `fetcher/decrypt_capture.py` decrypts the captured flows to reveal the exact
+`data` payload to replicate, which gets pinned in
+`health_client.WORKING_ENDPOINTS`.
 
 ## Quick start (iOS, with sample data — no Xiaomi needed)
 
@@ -62,11 +76,16 @@ open ios/Band10Health/Band10Health.xcodeproj
 ```bash
 cd fetcher
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-export MI_USER="you@example.com" MI_REGION="de"
+export MI_USER="you@example.com" MI_REGION="de"   # de = Europe (confirmed)
 read -s MI_PASS && export MI_PASS
-.venv/bin/python -m band10.cli login      # test auth
-.venv/bin/python -m band10.cli probe      # discover sleep endpoint
+.venv/bin/python -m band10.cli login      # test auth (needs a Xiaomi password)
+.venv/bin/python -m band10.cli probe      # hit the confirmed endpoints
+# Once logged in, reveal the real request payload from a capture:
+.venv/bin/python decrypt_capture.py capture/mifitness_flows.mitm
 ```
+
+Capturing Mi Fitness traffic (to confirm the payload on your account/region) is
+documented in [`fetcher/scripts/capture_help.md`](fetcher/scripts/capture_help.md).
 
 ## Legal & disclaimer
 

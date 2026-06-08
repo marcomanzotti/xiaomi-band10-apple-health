@@ -10,6 +10,10 @@ sleep_export.json
 *.token
 mi_credentials*
 
+# Captured traffic — contains real serviceToken / personal data
+fetcher/capture/
+*.mitm
+
 # macOS
 .DS_Store
 

@@ -34,6 +34,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		B1000020000000000000020 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				B1000003000000000000003 /* SleepExport.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		B1000021000000000000021 /* HealthKit */ = {
+			isa = PBXGroup;
+			children = (
+				B1000004000000000000004 /* HealthKitWriter.swift */,
+			);
+			path = HealthKit;
+			sourceTree = "<group>";
+		};
 		B10000C0000000000000012 = {
 			isa = PBXGroup;
 			children = (
@@ -53,22 +69,6 @@
 				B1000006000000000000006 /* Band10Health.entitlements */,
 			);
 			path = Band10Health;
-			sourceTree = "<group>";
-		};
-		B1000020000000000000020 /* Models */ = {
-			isa = PBXGroup;
-			children = (
-				B1000003000000000000003 /* SleepExport.swift */,
-			);
-			path = Models;
-			sourceTree = "<group>";
-		};
-		B1000021000000000000021 /* HealthKit */ = {
-			isa = PBXGroup;
-			children = (
-				B1000004000000000000004 /* HealthKitWriter.swift */,
-			);
-			path = HealthKit;
 			sourceTree = "<group>";
 		};
 		B10000E0000000000000014 /* Products */ = {
@@ -210,6 +210,7 @@
 				CODE_SIGN_ENTITLEMENTS = Band10Health/Band10Health.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y63UKFMUPH;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Band10Health/Info.plist;
@@ -235,6 +236,7 @@
 				CODE_SIGN_ENTITLEMENTS = Band10Health/Band10Health.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y63UKFMUPH;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Band10Health/Info.plist;
@@ -256,20 +258,20 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		B100001A00000000000001A /* Build configuration list for PBXProject "Band10Health" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				B100001B00000000000001B /* Debug */,
-				B100001C00000000000001C /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		B1000016000000000000016 /* Build configuration list for PBXNativeTarget "Band10Health" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				B100001D00000000000001D /* Debug */,
 				B100001E00000000000001E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B100001A00000000000001A /* Build configuration list for PBXProject "Band10Health" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B100001B00000000000001B /* Debug */,
+				B100001C00000000000001C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

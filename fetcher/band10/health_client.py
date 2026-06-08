@@ -41,48 +41,36 @@ class HealthClient(XiaomiClient):
 
     # Candidate endpoints to probe. Each entry: how to build the URL + params.
     # `region` subdomain is substituted at call time.
+    # CONFIRMED from live mitmproxy capture of Mi Fitness 3.49.0 (iOS) talking
+    # to the Band 10, region `de`. All are POST to `{region}.hlth.io.mi.com`
+    # with an RC4-encrypted `data` form field and a `serviceToken` cookie.
+    # The sleep/vitals time-series comes from `get_fitness_data_by_watermark`.
     CANDIDATES: list[dict[str, Any]] = [
-        # --- Style A: generic time-series "fetch" under healthapp/ ---
         {
-            "name": "healthapp_sleep_fetch",
-            "path": "/healthapp/sleep/v1/fetch",
-            "method": "GET",
-            "path_prefix": "healthapp/",
+            "name": "get_fitness_data_by_watermark",
+            "path": "/app/v1/data/get_fitness_data_by_watermark",
+            "method": "POST",
+            "path_prefix": "app/v1/",
             "regional": True,
         },
         {
-            "name": "healthapp_sleep_list",
-            "path": "/healthapp/v1/sleep/list",
-            "method": "GET",
-            "path_prefix": "healthapp/",
+            "name": "get_aggregated_fitness_data_by_watermark",
+            "path": "/app/v1/data/get_aggregated_fitness_data_by_watermark",
+            "method": "POST",
+            "path_prefix": "app/v1/",
             "regional": True,
         },
-        # --- Style B: data-collection style (newer Mi Fitness uses /app/v1) ---
         {
-            "name": "app_v1_data_sleep",
-            "path": "/app/v1/data/sleep",
+            "name": "get_stat_data_by_time",
+            "path": "/app/v1/statistics/get_stat_data_by_time",
             "method": "POST",
             "path_prefix": "app/v1/",
-            "regional": False,  # device data lives on base domain
-        },
-        {
-            "name": "app_v1_health_sleep",
-            "path": "/app/v1/health/sleep_report",
-            "method": "POST",
-            "path_prefix": "app/v1/",
-            "regional": False,
-        },
-        # --- Style C: band_data-style summary (legacy huami schema, sometimes proxied) ---
-        {
-            "name": "healthapp_band_data",
-            "path": "/healthapp/v1/data/band_data",
-            "method": "GET",
-            "path_prefix": "healthapp/",
             "regional": True,
         },
     ]
 
     def _base_domain(self, regional: bool) -> str:
+        # Capture shows health data on the REGIONAL host (de.hlth.io.mi.com).
         return f"{self.region}.hlth.io.mi.com" if regional else "hlth.io.mi.com"
 
     def _date_params(self, from_date: date, to_date: date) -> dict[str, str]:
