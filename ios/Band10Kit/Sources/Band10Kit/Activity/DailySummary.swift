@@ -51,6 +51,10 @@ public enum DailySummaryFile {
         let validity = ValidityBitmap(header: try reader.take(layout.headerLength))
         var values: [Slot: Int] = [:]
         for slot in Slot.allCases.prefix(layout.slotCount) {
+            // The Band 10 ends its file before the last reserved slots, which the
+            // Gadgetbridge layout reads from the checksum: a slot that does not
+            // fit is absent.
+            guard reader.remaining >= slot.width else { break }
             let raw = try reader.take(slot.width).enumerated().reduce(0) { $0 | Int($1.element) << (8 * $1.offset) }
             if validity.isValid(slot.rawValue) {
                 values[slot] = raw

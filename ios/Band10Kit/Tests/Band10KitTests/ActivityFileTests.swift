@@ -284,13 +284,28 @@ struct DailySummaryTests {
         #expect(try DailySummaryFile.parse(file).restingHeartRate == nil)
     }
 
-    @Test("fails on a file shorter than its layout")
-    func rejectsShortFile() throws {
-        let file = try makeActivityFile(try activityID(FileFlags.dailySummary, version: 5), content: Data(count: 10))
+    @Test("reads a real Band 10 file, which stops before the last two reserved slots")
+    func parsesRealBandFile() throws {
+        // Captured from a Band 10 on 2026-10-14: an empty day, 69 bytes in all.
+        let raw = Data(hex: "00c6ce6a00050100") + Data(count: 57) + Data(hex: "dae4e401")
+        let file = try ActivityFile(raw: raw)
 
-        #expect(throws: ActivityParseError.truncated) {
-            try DailySummaryFile.parse(file)
-        }
+        let summary = try DailySummaryFile.parse(file)
+
+        #expect(summary.steps == nil)
+        #expect(summary.restingHeartRate == nil)
+    }
+
+    @Test("reads the values that fit and leaves the rest absent when the file is short")
+    func readsShortFile() throws {
+        let file = try makeActivityFile(
+            try activityID(FileFlags.dailySummary, version: 5), content: Data(hex: "80000000" + "401f0000" + "00")
+        )
+
+        let summary = try DailySummaryFile.parse(file)
+
+        #expect(summary.steps == 8000)
+        #expect(summary.totalCalories == nil)
     }
 }
 
