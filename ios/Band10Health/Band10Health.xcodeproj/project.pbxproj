@@ -11,6 +11,15 @@
 		B1000012000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000002000000000000002 /* ContentView.swift */; };
 		B1000013000000000000003 /* SleepExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000003000000000000003 /* SleepExport.swift */; };
 		B1000014000000000000004 /* HealthKitWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000004000000000000004 /* HealthKitWriter.swift */; };
+		B1000015000000000000005 /* BandProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000007000000000000007 /* BandProbe.swift */; };
+		B1000016100000000000006 /* BandProbeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000008000000000000008 /* BandProbeView.swift */; };
+		B1000017100000000000007 /* BandSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000009000000000000009 /* BandSession.swift */; };
+		B1000018100000000000008 /* BandBindCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000A10000000000000A /* BandBindCheck.swift */; };
+		B1000032000000000000032 /* Band10Kit in Frameworks */ = {isa = PBXBuildFile; productRef = B1000031000000000000031 /* Band10Kit */; };
+		B1000034000000000000034 /* Band10Sync in Frameworks */ = {isa = PBXBuildFile; productRef = B1000033000000000000033 /* Band10Sync */; };
+		B1000019100000000000009 /* BandKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000B10000000000000B /* BandKeychain.swift */; };
+		B100001A10000000000000A /* BandPairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000C10000000000000C /* BandPairing.swift */; };
+		B100001B10000000000000B /* BandAuthCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000D10000000000000D /* BandAuthCheck.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -20,6 +29,14 @@
 		B1000004000000000000004 /* HealthKitWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitWriter.swift; sourceTree = "<group>"; };
 		B1000005000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B1000006000000000000006 /* Band10Health.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Band10Health.entitlements; sourceTree = "<group>"; };
+		B1000007000000000000007 /* BandProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BandProbe.swift; sourceTree = "<group>"; };
+		B1000008000000000000008 /* BandProbeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BandProbeView.swift; sourceTree = "<group>"; };
+		B1000009000000000000009 /* BandSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BandSession.swift; sourceTree = "<group>"; };
+		B100000A10000000000000A /* BandBindCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BandBindCheck.swift; sourceTree = "<group>"; };
+		B1000030000000000000030 /* Band10Kit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = Band10Kit; path = ../Band10Kit; sourceTree = "<group>"; };
+		B100000B10000000000000B /* BandKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BandKeychain.swift; sourceTree = "<group>"; };
+		B100000C10000000000000C /* BandPairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BandPairing.swift; sourceTree = "<group>"; };
+		B100000D10000000000000D /* BandAuthCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BandAuthCheck.swift; sourceTree = "<group>"; };
 		B10000A0000000000000010 /* Band10Health.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Band10Health.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -28,6 +45,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B1000032000000000000032 /* Band10Kit in Frameworks */,
+				B1000034000000000000034 /* Band10Sync in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -50,9 +69,24 @@
 			path = HealthKit;
 			sourceTree = "<group>";
 		};
+		B1000022000000000000022 /* Band */ = {
+			isa = PBXGroup;
+			children = (
+				B1000007000000000000007 /* BandProbe.swift */,
+				B1000008000000000000008 /* BandProbeView.swift */,
+				B1000009000000000000009 /* BandSession.swift */,
+				B100000A10000000000000A /* BandBindCheck.swift */,
+				B100000B10000000000000B /* BandKeychain.swift */,
+				B100000C10000000000000C /* BandPairing.swift */,
+				B100000D10000000000000D /* BandAuthCheck.swift */,
+			);
+			path = Band;
+			sourceTree = "<group>";
+		};
 		B10000C0000000000000012 = {
 			isa = PBXGroup;
 			children = (
+				B1000030000000000000030 /* Band10Kit */,
 				B10000D0000000000000013 /* Band10Health */,
 				B10000E0000000000000014 /* Products */,
 			);
@@ -65,6 +99,7 @@
 				B1000002000000000000002 /* ContentView.swift */,
 				B1000020000000000000020 /* Models */,
 				B1000021000000000000021 /* HealthKit */,
+				B1000022000000000000022 /* Band */,
 				B1000005000000000000005 /* Info.plist */,
 				B1000006000000000000006 /* Band10Health.entitlements */,
 			);
@@ -95,6 +130,10 @@
 			dependencies = (
 			);
 			name = Band10Health;
+			packageProductDependencies = (
+				B1000031000000000000031 /* Band10Kit */,
+				B1000033000000000000033 /* Band10Sync */,
+			);
 			productName = Band10Health;
 			productReference = B10000A0000000000000010 /* Band10Health.app */;
 			productType = "com.apple.product-type.application";
@@ -151,10 +190,28 @@
 				B1000012000000000000002 /* ContentView.swift in Sources */,
 				B1000013000000000000003 /* SleepExport.swift in Sources */,
 				B1000014000000000000004 /* HealthKitWriter.swift in Sources */,
+				B1000015000000000000005 /* BandProbe.swift in Sources */,
+				B1000016100000000000006 /* BandProbeView.swift in Sources */,
+				B1000017100000000000007 /* BandSession.swift in Sources */,
+				B1000018100000000000008 /* BandBindCheck.swift in Sources */,
+				B1000019100000000000009 /* BandKeychain.swift in Sources */,
+				B100001A10000000000000A /* BandPairing.swift in Sources */,
+				B100001B10000000000000B /* BandAuthCheck.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B1000031000000000000031 /* Band10Kit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Band10Kit;
+		};
+		B1000033000000000000033 /* Band10Sync */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Band10Sync;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		B100001B00000000000001B /* Debug */ = {

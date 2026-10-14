@@ -1,132 +1,98 @@
 # Band 10 → Apple Health
 
-Inject **detailed, segmented sleep data** from a Xiaomi Smart Band 10 (Mi Fitness)
-into Apple Health — sleep **stages** (Light / Deep / REM / Awake), **heart rate**,
-**SpO₂**, **HRV (SDNN)** and **respiratory rate**.
+Talk to a **Xiaomi Smart Band 10 directly over Bluetooth** from an iPhone, with
+no Mi Fitness and no Xiaomi cloud in the data path, and write everything the
+band records into Apple Health: **steps, active energy, distance, heart rate,
+resting heart rate, SpO₂ and sleep stages** (Light / Deep / REM / Awake).
 
-## Why
-
-Mi Fitness on iOS writes sleep to Apple Health as a *single* undifferentiated
-`Asleep` block, even though the app itself records full sleep stages and vitals.
-This project recovers the detail and writes proper, segmented HealthKit samples.
+The sync runs on its own in the background, the way the vendor app does: the
+phone stays connected to the band, downloads new data on every reconnection
+and then about every 15 minutes, and writes it to Health as soon as Health can
+be written (it queues while the phone is locked).
 
 ## How it works
 
-Two halves connected by a small JSON contract
-(see [`fetcher/band10/sleep_model.py`](fetcher/band10/sleep_model.py)):
-
 ```
-Xiaomi cloud ──(fetcher, Python)──▶ sleep_export.json ──(iOS app)──▶ Apple Health
+Band 10 ──BLE (FE95, encrypted)──▶ Band10Sync (iOS) ──▶ disk queue ──▶ Apple Health
 ```
 
-1. **`fetcher/`** — Python tool that logs into the Xiaomi Mi Account
-   (`miothealth` service), talks to the `*.hlth.io.mi.com` health cloud, and
-   (once the data-endpoint schema is cracked — see Status) exports sleep data
-   to the normalized JSON format.
-2. **`ios/`** — a SwiftUI app you run on your iPhone. It opens the JSON, asks
-   for HealthKit permission, and writes one `HKCategorySample` per sleep stage
-   (`.asleepCore/.asleepDeep/.asleepREM/.awake/.inBed`) plus quantity samples
-   for HR / SpO₂ / HRV / respiratory rate.
+- **`ios/Band10Kit/`** — Swift package.
+  - `Band10Kit`: the band protocol with no platform code — frame codec, CRC,
+    session keys (HKDF), AES-CTR/CCM, protobuf messages, pairing and
+    authentication, the activity-file download sequence, and parsers for the
+    band's files (per-minute activity, daily summary, sleep, sleep stages,
+    spot measurements). Fully unit-tested.
+  - `Band10Sync`: what an app embeds — CoreBluetooth link with state
+    restoration, the sync engine, an on-disk queue, the HealthKit writer
+    (deduplicated through sync identifiers) and a SwiftUI settings screen.
+- **`ios/Band10Health/`** — a test app used to probe the band. It never writes
+  to Health. The real sync is meant to live in your own app (the author uses
+  it inside FitTracker).
+- **`fetcher/`** — Python tools for the one step that still needs Xiaomi (see
+  below).
+
+## The one step that needs Xiaomi
+
+Every session with the band is authenticated with a 16-byte key created when
+the band is paired. The Band 10 only accepts *server-assisted* pairing, so the
+key is created by Xiaomi's servers once per pairing:
+
+1. Pair the band with Mi Fitness once.
+2. Fetch the key from your account with `fetcher/scripts/fetch_band_key.py`
+   (it replays Mi Fitness's device-list call; capture how-to in
+   `fetcher/scripts/capture_help.md`). The key is written to a file readable
+   only by you and is never printed.
+3. Give the key to the app (settings screen, or launch argument
+   `--band-set-authkey` from a Mac). It is kept in the Keychain, on that phone
+   only.
+4. Close Mi Fitness for good (or delete it): two apps cannot share the band's
+   session.
+
+After that, nothing goes to Xiaomi. Pairing the band again changes the key.
 
 ## Status
 
 | Part | State |
 |------|-------|
-| iOS HealthKit writer (SwiftUI) | ✅ builds & runs on device; **fully working** with `sample_sleep.json` |
-| Xiaomi login (incl. email 2FA / `securityStatus 16`) | ✅ **solved** — see below |
-| Session persistence (no repeated email codes) | ✅ solved — cached to `fetcher/.mi_session.json` |
-| Sleep data endpoint — discovery | ✅ confirmed: `POST /app/v1/data/get_fitness_data_by_watermark` on `{region}.hlth.io.mi.com` |
-| Sleep data endpoint — **request payload schema** | ❌ **unsolved** — server replies `{"code":0,"message":"auth err"}` for every payload shape tried (see below) |
-| End-to-end automated fetch | 🚧 blocked on the line above |
+| Transport, encryption, authentication | ✅ verified on a real band |
+| Key retrieval from the Xiaomi account | ✅ |
+| Activity download + file parsers | ✅ unit-tested against the Gadgetbridge layouts; first run on a real band pending |
+| HealthKit writer, background sync | ✅ builds; first run on a real band pending |
+| Workouts | ❌ left on the band for now |
+| Weather, notifications, alarms on the band | ❌ not served |
 
-### What works today
-
-- **Full login flow**, including the `securityStatus: 16` identity-verification
-  wall (Xiaomi requires email/SMS confirmation for new devices). Implemented in
-  [`fetcher/band10/xiaomi_2fa.py`](fetcher/band10/xiaomi_2fa.py): detects the
-  wall, sends a verification email, accepts your code, marks the device trusted
-  (`trust=true`), and extracts `ssecurity` from the `extension-pragma` header.
-- **Session caching**: once you complete the email-code step *once*,
-  `ssecurity` / `serviceToken` / cookies are cached to `fetcher/.mi_session.json`
-  (mode 600, gitignored) and reused — no more verification prompts on
-  subsequent runs.
-- **Endpoint + auth_key discovery**: a live mitmproxy capture of Mi Fitness
-  3.49.0 (iOS) confirmed the sleep data lives on the *regional* host
-  (`{region}.hlth.io.mi.com`, e.g. `de.hlth.io.mi.com`), comes from
-  `POST /app/v1/data/get_fitness_data_by_watermark`, and that the request
-  additionally needs an `auth_key` cookie (your Band's pairing key — settable
-  via `MI_AUTH_KEY` env var, see Quick start).
-
-### What's blocking full automation
-
-Even with a valid `serviceToken`, correct RC4 signing/encryption (vendored from
-[huami-token](https://codeberg.org/argrento/huami-token/)), the right
-`auth_key` cookie, and an iOS-style User-Agent, the data endpoints uniformly
-reply **HTTP 401 `{"code":0,"message":"auth err"}`** — for every JSON shape we
-tried in the `data` field (`data_type`, `watermark`, `start_time`/`end_time`,
-`source`, `category`, …). This response is identical regardless of payload
-content, which suggests the rejection happens *before* the payload is parsed —
-likely some additional per-install/device fingerprint the official app sends
-that we haven't identified.
-
-We could not find this schema documented anywhere publicly (checked
-Gadgetbridge, huami-token, AstroBox, hacking-mifit-api, zepp_to_influxdb — none
-cover these specific `hlth.io.mi.com` watermark/statistics endpoints). The only
-way to learn it would be decrypting the *phone app's own* traffic, which
-requires *its* `ssecurity` — a value that's per-login-session and never appears
-on the wire (each login, including the phone's, derives its own).
-
-**If you can get further** (e.g. you find the right payload shape, or capture
-your phone's `ssecurity` at the moment Mi Fitness logs in), `fetch_sleep()` in
-[`fetcher/band10/health_client.py`](fetcher/band10/health_client.py) is ready
-to be completed — pin your finding into `WORKING_ENDPOINTS["sleep"]`.
-
-## Quick start (iOS, with sample data — no Xiaomi cloud needed)
-
-This part works fully today.
+Running tests (outside an iCloud-synced folder for the build products):
 
 ```bash
-open ios/Band10Health/Band10Health.xcodeproj
+cd ios/Band10Kit
+swift test --scratch-path ~/.cache/band10kit-build
 ```
 
-1. Select your iPhone as the run target, set your signing Team, run (⌘R).
-2. In the app: **Richiedi accesso ad Apple Health** → enable the toggles.
-3. AirDrop / put `sample_sleep.json` in Files, then **Scegli file JSON…**.
-4. **Importa in Salute** → open Apple Health → Sleep to see the staged night.
+### Lessons learned
 
-## Quick start (fetcher — login works, data fetch is blocked)
-
-```bash
-cd fetcher
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-export MI_USER="you@example.com" MI_REGION="de"   # de = Europe
-read -s MI_PASS && export MI_PASS
-
-# First run: you'll get an email with a verification code (securityStatus 16).
-# After that, the session is cached — no more codes needed.
-.venv/bin/python -m band10.cli login
-
-# Optional: skip auth_key auto-discovery (currently broken — get_source_list
-# returns an empty device list for unknown reasons) by setting it directly.
-# Find yours by capturing Mi Fitness traffic (see scripts/capture_help.md) and
-# looking at the `cookie:` header of any /app/v1/ request — `auth_key=...`.
-export MI_AUTH_KEY="your16charkey"
-
-.venv/bin/python -m band10.cli probe   # currently returns "auth err" — see Status
-```
+- Introduce the phone as **iOS** in the authentication step. Declaring an
+  Android phone over Bluetooth LE made the band stop listening on LE and drop
+  off until a factory reset (Android phones use Bluetooth Classic with it).
+  AstroBox does the same: iOS over LE, Android over Classic.
+- A bound band silently drops any unauthenticated request.
 
 ## Legal & disclaimer
 
-Personal-use tool for accessing **your own** account and **your own** health
-data via Xiaomi's own endpoints, then writing it into **your own** Apple Health.
-Unofficial; not affiliated with or endorsed by Xiaomi/Huami/Apple. The Xiaomi
-API is undocumented and may change or break at any time. Use at your own risk.
+Personal-use tool for **your own** band, **your own** account and **your own**
+health data. Unofficial; not affiliated with or endorsed by Xiaomi or Apple.
+Use at your own risk.
 
 ## Credits
 
-- Xiaomi Mi Account login + RC4 crypto: [huami-token](https://codeberg.org/argrento/huami-token/) by Kirill Snezhko (MIT).
-- Sleep-data schema research: [Gadgetbridge](https://gadgetbridge.org), [hacking-mifit-api](https://github.com/micw/hacking-mifit-api), [zepp_to_influxdb](https://github.com/bentasker/zepp_to_influxdb).
+- Band protocol and file layouts: [Gadgetbridge](https://gadgetbridge.org) (AGPL-3.0).
+- Companion-device field names and the iOS-over-LE convention: [AstroBox](https://github.com/AstralSightStudios) (AGPL-3.0).
+- Pairing protocol: static analysis of Mi Fitness with [REA](https://github.com/morluto/rea).
+- Xiaomi account login + RC4 crypto: [huami-token](https://codeberg.org/argrento/huami-token/) by Kirill Snezhko (MIT).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+AGPL-3.0-or-later — see [LICENSE](LICENSE). Copyright (c) 2026 Marco Manzotti.
+
+The project was MIT-licensed up to commit `d41bc7c`. It moved to the AGPL so the
+band protocol code can build on Gadgetbridge, which is AGPL-3.0. The vendored
+huami-token code under `fetcher/band10/vendor_huami/` keeps its own MIT notice.

@@ -23,3 +23,6 @@ ios/**/xcuserdata/
 ios/**/DerivedData/
 ios/**/*.xcuserstate
 build/
+
+# SwiftPM
+.build/
