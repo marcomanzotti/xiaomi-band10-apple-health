@@ -86,6 +86,11 @@ public final class BandSyncEngine: ObservableObject {
     /// A proof that does not match can be a reply left over from an earlier
     /// session; the key is declared wrong only when a fresh session fails too.
     private var hasRetriedMismatch = false
+    /// Commands that decrypt to nothing readable, in a row. Several mean another
+    /// app (Mi Fitness) authenticated on the shared link and the band now uses
+    /// its session keys.
+    private var unreadableCommands = 0
+    private static let unreadableCommandsBeforeReauthentication = 3
     private var pausedUntil: Date?
     private var lastSyncAttempt: Date?
     private var notificationObservers: [NSObjectProtocol] = []
@@ -382,9 +387,17 @@ public final class BandSyncEngine: ObservableObject {
 
     private func handleCommand(_ body: Data) {
         guard let header = try? CommandHeader.parse(body) else {
-            note("comando cifrato illeggibile")
+            unreadableCommands += 1
+            guard unreadableCommands >= Self.unreadableCommandsBeforeReauthentication else { return }
+            note("la band usa chiavi di un'altra sessione (un'altra app?): mi riautentico")
+            unreadableCommands = 0
+            registerFailure()
+            endSession()
+            phase = .connecting
+            link?.reopenSession()
             return
         }
+        unreadableCommands = 0
         switch header.type {
         case HealthCommand.commandType:
             if let reply = try? HealthReply.parse(body) {
