@@ -83,6 +83,9 @@ public final class BandSyncEngine: ObservableObject {
     private var isImporting = false
     private var importRequestedAgain = false
     private var consecutiveFailures = 0
+    /// A proof that does not match can be a reply left over from an earlier
+    /// session; the key is declared wrong only when a fresh session fails too.
+    private var hasRetriedMismatch = false
     private var pausedUntil: Date?
     private var lastSyncAttempt: Date?
     private var notificationObservers: [NSObjectProtocol] = []
@@ -312,6 +315,11 @@ public final class BandSyncEngine: ObservableObject {
             note("risposta di autenticazione illeggibile")
             return
         }
+        switch reply {
+        case .deviceVerify: note("band: numero casuale e prova ricevuti")
+        case .accepted: note("band: prova del telefono accettata")
+        case .rejected(let subtype, let status): note("band: rifiuto (sottotipo \(subtype), stato \(status))")
+        }
         perform(authenticator?.handle(reply) ?? [])
     }
 
@@ -325,7 +333,12 @@ public final class BandSyncEngine: ObservableObject {
             case .failed(let failure):
                 replyTimer?.cancel()
                 note("autenticazione fallita: \(failure)")
-                if failure == .keyMismatch || failure == .invalidAuthKey {
+                if failure == .keyMismatch, !hasRetriedMismatch {
+                    hasRetriedMismatch = true
+                    authenticator = nil
+                    note("riprovo una volta con una sessione nuova")
+                    link?.reopenSession()
+                } else if failure == .keyMismatch || failure == .invalidAuthKey {
                     phase = .keyRejected
                     link?.stop()
                     link = nil
@@ -343,6 +356,7 @@ public final class BandSyncEngine: ObservableObject {
         replyTimer?.cancel()
         self.cipher = cipher
         authenticator = nil
+        hasRetriedMismatch = false
         phase = .connected
         note("autenticata")
         sendEncrypted(SystemCommand.setClock(to: Date(), in: .current, usesTwelveHourFormat: Self.usesTwelveHourClock))
