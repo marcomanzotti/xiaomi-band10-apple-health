@@ -73,19 +73,39 @@ public struct HealthStoreWriter: Sendable {
         try await store.requestAuthorization(toShare: Set(Self.writtenTypes), read: [])
     }
 
-    /// Writes the samples of the types the user allowed and returns how many
-    /// were written. Throws when Health cannot be written right now, for example
-    /// while the phone is locked: the caller should try again later.
-    @discardableResult
-    public func write(_ samples: [HealthSample]) async throws -> Int {
-        let objects = samples.compactMap(object(for:))
-        for start in stride(from: 0, to: objects.count, by: Self.batchSize) {
-            try await store.save(Array(objects[start..<min(start + Self.batchSize, objects.count)]))
-        }
-        return objects.count
+    public struct WriteResult: Equatable, Sendable {
+        public var written = 0
+        /// Values Health refused because writing that type is not allowed.
+        public var refused = 0
+        /// The refused types and Health's reason, for the diary.
+        public var refusals: [String] = []
     }
 
-    private func object(for sample: HealthSample) -> HKObject? {
+    /// Writes the samples type by type and reports what Health accepted. The
+    /// permission status iOS reports is not trusted: each type is attempted, and
+    /// only Health's own refusal counts as "not allowed". Throws when Health
+    /// cannot be written right now, for example while the phone is locked: the
+    /// caller should try again later.
+    public func write(_ samples: [HealthSample]) async throws -> WriteResult {
+        let objects = samples.compactMap(object(for:))
+        let byType = Dictionary(grouping: objects) { $0.sampleType.identifier }
+        var result = WriteResult()
+        for group in byType.values {
+            do {
+                for start in stride(from: 0, to: group.count, by: Self.batchSize) {
+                    try await store.save(Array(group[start..<min(start + Self.batchSize, group.count)]))
+                }
+                result.written += group.count
+            } catch let error as HKError where error.code == .errorAuthorizationDenied || error.code == .errorAuthorizationNotDetermined {
+                result.refused += group.count
+                let name = group.first.map { Self.name(of: $0.sampleType) } ?? "?"
+                result.refusals.append("\(name) (\(error.code.rawValue))")
+            }
+        }
+        return result
+    }
+
+    private func object(for sample: HealthSample) -> HKSample? {
         let metadata: [String: Any] = [
             HKMetadataKeySyncIdentifier: sample.syncIdentifier,
             HKMetadataKeySyncVersion: sample.syncVersion,
@@ -93,15 +113,12 @@ public struct HealthStoreWriter: Sendable {
         ]
         if case .sleep(let stage) = sample.kind {
             let type = HKCategoryType(.sleepAnalysis)
-            guard store.authorizationStatus(for: type) == .sharingAuthorized else { return nil }
             return HKCategorySample(
                 type: type, value: Self.sleepValue(stage).rawValue,
                 start: sample.start, end: sample.end, device: Self.device, metadata: metadata
             )
         }
-        guard let (type, unit) = Self.quantity(for: sample.kind),
-              store.authorizationStatus(for: type) == .sharingAuthorized
-        else { return nil }
+        guard let (type, unit) = Self.quantity(for: sample.kind) else { return nil }
         return HKQuantitySample(
             type: type, quantity: HKQuantity(unit: unit, doubleValue: sample.value),
             start: sample.start, end: sample.end, device: Self.device, metadata: metadata
