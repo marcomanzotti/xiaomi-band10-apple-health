@@ -31,6 +31,19 @@ public struct BandSyncView: View {
                     .disabled(engine.phase != .connected)
             }
 
+            if case .answered(let allowed, let total) = engine.healthAccess, allowed < total {
+                Section {
+                    Text(allowed == 0
+                         ? "Salute non permette a quest'app di scrivere i dati della band."
+                         : "Salute permette di scrivere solo \(allowed) dati su \(total).")
+                    Text("Impostazioni → Privacy e sicurezza → Salute → quest'app: attiva tutte le voci in \"Consenti di scrivere\". I dati già scaricati vengono scritti da soli.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("Permessi di Salute")
+                }
+            }
+
             if engine.healthAccess == .notRequested {
                 Section {
                     Button("Consenti di scrivere in Salute") {

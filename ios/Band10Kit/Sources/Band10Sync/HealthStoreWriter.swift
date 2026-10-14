@@ -9,8 +9,14 @@ public enum HealthAccess: Equatable, Sendable {
     case unavailable
     /// The user has not been asked yet: nothing can be written.
     case notRequested
-    /// The user answered; individual data types may still be switched off.
-    case requested
+    /// The user answered: `allowed` of the `total` data types may be written.
+    /// On iOS the permission sheet starts with every type switched off, so a
+    /// quick "Allow" can leave this at zero.
+    case answered(allowed: Int, total: Int)
+
+    public var allowsWriting: Bool {
+        if case .answered(let allowed, _) = self { allowed > 0 } else { false }
+    }
 }
 
 /// Writes the band's measurements to Apple Health. Every sample carries a sync
@@ -38,8 +44,27 @@ public struct HealthStoreWriter: Sendable {
 
     public var access: HealthAccess {
         guard HKHealthStore.isHealthDataAvailable() else { return .unavailable }
-        let isUndecided = Self.writtenTypes.contains { store.authorizationStatus(for: $0) == .notDetermined }
-        return isUndecided ? .notRequested : .requested
+        let statuses = Self.writtenTypes.map { store.authorizationStatus(for: $0) }
+        guard !statuses.contains(.notDetermined) else { return .notRequested }
+        return .answered(allowed: statuses.filter { $0 == .sharingAuthorized }.count, total: statuses.count)
+    }
+
+    /// Names of the data types the user switched off, for the diary and the settings screen.
+    public var switchedOffTypes: [String] {
+        Self.writtenTypes.filter { store.authorizationStatus(for: $0) == .sharingDenied }.map(Self.name(of:))
+    }
+
+    private static func name(of type: HKSampleType) -> String {
+        switch type {
+        case HKQuantityType(.stepCount): "passi"
+        case HKQuantityType(.activeEnergyBurned): "energia attiva"
+        case HKQuantityType(.distanceWalkingRunning): "distanza"
+        case HKQuantityType(.heartRate): "battito"
+        case HKQuantityType(.restingHeartRate): "battito a riposo"
+        case HKQuantityType(.oxygenSaturation): "SpO₂"
+        case HKCategoryType(.sleepAnalysis): "sonno"
+        default: type.identifier
+        }
     }
 
     /// Shows the system's permission sheet. Only works while the app is on screen.

@@ -74,6 +74,15 @@ public struct ActivityFileStore: Sendable {
         return true
     }
 
+    /// Puts every imported file back in the queue, for example after the user
+    /// allowed more data types in Health. Sync identifiers keep this free of duplicates.
+    public func requeueImported() throws {
+        let urls = try FileManager.default.contentsOfDirectory(at: try directory(.imported), includingPropertiesForKeys: nil)
+        for url in urls where url.pathExtension == Self.fileExtension {
+            try move(url, to: .pending)
+        }
+    }
+
     public func markRejected(_ id: ActivityFileID) throws {
         try move(try directory(.pending).appendingPathComponent(id.filename), to: .rejected)
     }

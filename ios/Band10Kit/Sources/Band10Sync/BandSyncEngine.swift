@@ -62,6 +62,8 @@ public final class BandSyncEngine: ObservableObject {
     }
 
     private static let lastSyncKey = "lastSync"
+    /// How many data types Health allowed at the last import.
+    private static let allowedTypesKey = "allowedHealthTypes"
     /// `--band-set-authkey <32 hex digits>` stores a key at launch, so that a Mac
     /// can hand over a new key without typing it on the phone.
     private static let setKeyArgument = "--band-set-authkey"
@@ -521,13 +523,33 @@ public final class BandSyncEngine: ObservableObject {
         try? store.removeImportedFiles(olderThan: Date().addingTimeInterval(-Timing.keepProcessedFiles))
     }
 
+    /// When the user allows more data types, the files already imported are
+    /// written again so that the newly allowed values reach Health too.
+    private func requeueIfMoreTypesAllowed(_ store: ActivityFileStore) {
+        guard configuration.writesToHealth, case .answered(let allowed, _) = healthAccess else { return }
+        let previous = defaults.integer(forKey: Self.allowedTypesKey)
+        defaults.set(allowed, forKey: Self.allowedTypesKey)
+        guard allowed > previous else { return }
+        do {
+            try store.requeueImported()
+            note("permessi di Salute ampliati: riscrivo i dati già scaricati")
+        } catch {
+            note("impossibile rimettere in coda i file già importati: \(error.localizedDescription)")
+        }
+    }
+
     private func importOnce(from store: ActivityFileStore) async {
         healthAccess = writer.access
+        requeueIfMoreTypesAllowed(store)
+        let switchedOff = writer.switchedOffTypes
+        if configuration.writesToHealth, !switchedOff.isEmpty {
+            note("Salute: permesso spento per \(switchedOff.joined(separator: ", "))")
+        }
         let files = (try? store.pendingFiles()) ?? []
         pendingFileCount = files.count
         guard !files.isEmpty else { return }
-        guard !configuration.writesToHealth || healthAccess == .requested else {
-            note("\(files.count) file in attesa del permesso di scrivere in Salute")
+        guard !configuration.writesToHealth || healthAccess.allowsWriting else {
+            note("\(files.count) file in attesa: Salute non permette di scrivere nessun dato")
             return
         }
         // Grows by one per file, so two summaries of one day imported together still differ.
@@ -542,15 +564,18 @@ public final class BandSyncEngine: ObservableObject {
                 continue
             }
             let samples = HealthSamples.make(from: content, revision: firstRevision + index)
+            var written = 0
             if configuration.writesToHealth {
                 do {
-                    try await writer.write(samples)
+                    written = try await writer.write(samples)
                 } catch {
                     note("Salute non scrivibile ora (\(error.localizedDescription)), riprovo più tardi")
                     break
                 }
             }
-            note("\(file.id.kind): \(ContentDescription.describe(content)), \(samples.count) valori")
+            let skipped = samples.count - written
+            note("\(file.id.kind): \(ContentDescription.describe(content)), \(written) valori scritti in Salute"
+                + (skipped > 0 && configuration.writesToHealth ? ", \(skipped) saltati (permesso spento)" : ""))
             if (try? store.markImported(file)) != true {
                 importRequestedAgain = true
             }
