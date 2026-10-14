@@ -36,7 +36,10 @@ public struct BandSyncView: View {
                     Text(allowed == 0
                          ? "Salute non permette a quest'app di scrivere i dati della band."
                          : "Salute permette di scrivere solo \(allowed) dati su \(total).")
-                    Text("Impostazioni → Privacy e sicurezza → Salute → quest'app: attiva tutte le voci in \"Consenti di scrivere\". I dati già scaricati vengono scritti da soli.")
+                    Button("Chiedi di nuovo a Salute") {
+                        Task { await engine.requestHealthAccess() }
+                    }
+                    Text("Se non compare nessuna richiesta: Impostazioni → Privacy e sicurezza → Salute → quest'app, voci in \"Consenti di scrivere\". I dati già scaricati vengono scritti da soli.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } header: {
