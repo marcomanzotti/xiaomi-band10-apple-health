@@ -52,6 +52,10 @@ public final class BandSyncEngine: ObservableObject {
     @Published public private(set) var healthAccess = HealthAccess.unavailable
     @Published public private(set) var recentLog: [String] = []
 
+    /// Called after values were written to Health, so the host app can read them
+    /// back at once instead of waiting for its next scheduled import.
+    public var onHealthDataWritten: (@MainActor () -> Void)?
+
     private enum Timing {
         static let replyTimeout: Duration = .seconds(8)
         static let authenticationTimeout: Duration = .seconds(20)
@@ -558,6 +562,8 @@ public final class BandSyncEngine: ObservableObject {
             note("\(files.count) file in attesa del permesso di Salute")
             return
         }
+        var wroteToHealth = false
+        defer { if wroteToHealth { onHealthDataWritten?() } }
         // Grows by one per file, so two summaries of one day imported together still differ.
         let firstRevision = Int(Date().timeIntervalSince1970) * 1000
         for (index, file) in files.enumerated() {
@@ -571,6 +577,7 @@ public final class BandSyncEngine: ObservableObject {
             }
             let samples = HealthSamples.make(from: content, revision: firstRevision + index)
             var result = HealthStoreWriter.WriteResult()
+            defer { if result.written > 0 { wroteToHealth = true } }
             if configuration.writesToHealth {
                 do {
                     result = try await writer.write(samples)
