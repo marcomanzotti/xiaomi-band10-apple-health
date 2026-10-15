@@ -323,8 +323,9 @@ struct SleepTests {
     }
 
     /// Version 5: sleep quality and a heart-rate series are present, then packets.
-    private func detailsContent(stillAsleep: UInt8 = 0, packets: Data) -> Data {
-        let preamble = Data(hex: "1040") + Data([stillAsleep]) + littleEndian(bedTime) + littleEndian(bedTime + 2700)
+    /// The flag byte is 1 once the band closed the sleep.
+    private func detailsContent(wokeUp: UInt8 = 1, packets: Data) -> Data {
+        let preamble = Data(hex: "1040") + Data([wokeUp]) + littleEndian(bedTime) + littleEndian(bedTime + 2700)
         let quality = Data([80])
         let extended = Data(count: 9) + littleEndian(bedTime - 1800) + littleEndian(bedTime + 2700)
         let heartRates = Data(hex: "3c00" + "0200") + littleEndian(bedTime) + Data([55, 56])
@@ -368,7 +369,7 @@ struct SleepTests {
     @Test("marks a night the band has not closed yet")
     func flagsUnfinishedNight() throws {
         let file = try makeActivityFile(
-            try activityID(FileFlags.sleep, version: 5), content: detailsContent(stillAsleep: 1, packets: Data())
+            try activityID(FileFlags.sleep, version: 5), content: detailsContent(wokeUp: 0, packets: Data())
         )
 
         let session = try SleepDetails.parse(file)
@@ -386,6 +387,55 @@ struct SleepTests {
         )
 
         #expect(try SleepDetails.parse(file).segments.count == 1)
+    }
+
+    private func packet(type: UInt8, milliseconds: UInt64, lengthField: UInt16) -> Data {
+        let stamp = Data((0..<8).map { UInt8(truncatingIfNeeded: milliseconds >> UInt64(8 * $0)) })
+        return Data(hex: "fbfafcff" + "11") + stamp + Data([0x00, type])
+            + Data([UInt8(lengthField >> 8), UInt8(lengthField & 0xFF)])
+    }
+
+    @Test("builds the sleep from fell-asleep and woke-up events when the band sent no stages")
+    func parsesSleepWithoutStages() throws {
+        // Layout of a real Band 10 nap: events in milliseconds, empty stage packets,
+        // and data-less packet types (18) whose length field holds flags.
+        let ms = UInt64(bedTime) * 1000
+        let packets = [
+            packet(type: 18, milliseconds: ms, lengthField: 2),
+            packet(type: 2, milliseconds: ms, lengthField: 0),
+            packet(type: 3, milliseconds: ms + 1_800_000, lengthField: 5),
+            packet(type: 17, timestamp: bedTime, lengthField: 0),
+            packet(type: 2, milliseconds: ms + 3_420_000, lengthField: 0),
+            packet(type: 3, milliseconds: ms + 5_400_000, lengthField: 5),
+            // The band repeats earlier events in later blocks.
+            packet(type: 2, milliseconds: ms, lengthField: 0),
+            packet(type: 3, milliseconds: ms + 1_800_000, lengthField: 5),
+        ].reduce(Data(), +)
+        let file = try makeActivityFile(try activityID(FileFlags.sleep, version: 5), content: detailsContent(packets: packets))
+
+        let session = try SleepDetails.parse(file)
+
+        let start = Date(timeIntervalSince1970: TimeInterval(bedTime))
+        #expect(session.isFinished)
+        #expect(session.segments == [
+            SleepSegment(stage: .unspecified, start: start, end: start.addingTimeInterval(1800)),
+            SleepSegment(stage: .awake, start: start.addingTimeInterval(1800), end: start.addingTimeInterval(3420)),
+            SleepSegment(stage: .unspecified, start: start.addingTimeInterval(3420), end: start.addingTimeInterval(5400)),
+        ])
+    }
+
+    @Test("keeps two sleeps far apart separate instead of filling the day with awake time")
+    func separatesDistantSleeps() throws {
+        let ms = UInt64(bedTime) * 1000
+        let packets = [
+            packet(type: 2, milliseconds: ms, lengthField: 0),
+            packet(type: 3, milliseconds: ms + 1_800_000, lengthField: 5),
+            packet(type: 2, milliseconds: ms + 6 * 3_600_000, lengthField: 0),
+            packet(type: 3, milliseconds: ms + 7 * 3_600_000, lengthField: 5),
+        ].reduce(Data(), +)
+        let file = try makeActivityFile(try activityID(FileFlags.sleep, version: 5), content: detailsContent(packets: packets))
+
+        #expect(try SleepDetails.parse(file).segments.map(\.stage) == [.unspecified, .unspecified])
     }
 
     @Test("reads the one-byte header of earlier versions")

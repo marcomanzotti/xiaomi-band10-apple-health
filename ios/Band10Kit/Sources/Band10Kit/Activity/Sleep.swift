@@ -8,6 +8,9 @@ public enum SleepStage: Equatable, Sendable {
     case light
     case deep
     case rem
+    /// Asleep, without a stage: what the band reports when it did not stage the
+    /// sleep (for example a short night or a nap).
+    case unspecified
 }
 
 public struct SleepSegment: Equatable, Sendable {
@@ -50,14 +53,22 @@ public enum SleepDetails {
     private static let extendedPreambleLength = 9 + 4 + 4
     private static let extendedPreambleFields = 5
     private static let snoreSampleWidth = 4
-    /// The fields before the optional ones: the still-asleep flag, bed time and wake time.
+    /// The fields before the optional ones: the woke-up flag, bed time and wake time.
     private static let fixedFields = 3
+    /// The flag byte is 1 once the band has closed the sleep (Gadgetbridge calls
+    /// it `isAwake`); verified on a Band 10 file hours after waking up.
+    private static let wokeUpFlag: UInt8 = 1
 
     /// Bytes `FB FA FC FF` open every packet.
     private static let packetMarker: UInt32 = 0xFFFC_FAFB
     /// Marker, header length, timestamp, parity, type and data length.
     private static let packetHeaderLength = 4 + 1 + 8 + 1 + 1 + 2
     private static let stagesPacket: UInt8 = 17
+    private static let fellAsleepPacket: UInt8 = 2
+    private static let wokeUpPacket: UInt8 = 3
+    /// A gap between two asleep periods longer than this is a separate sleep,
+    /// not a time awake in bed.
+    private static let longestAwakeGap: TimeInterval = 2 * 3600
     /// Packet types whose length field holds flags: no data follows them.
     private static let packetsWithoutData: Set<UInt8> = [2, 3, 9, 12, 13, 14, 15]
     private static let stageShift: UInt16 = 12
@@ -69,7 +80,7 @@ public enum SleepDetails {
         var reader = ByteReader(file.content)
         let validity = ValidityBitmap(header: try reader.take(try headerLength(version: version)))
 
-        let stillAsleep = try reader.byte() == 1
+        let hasWokenUp = try reader.byte() == wokeUpFlag
         let bedTime = try reader.uint32()
         let wakeTime = try reader.uint32()
         var field = fixedFields
@@ -97,7 +108,7 @@ public enum SleepDetails {
         return SleepSession(
             bedTime: Date(timeIntervalSince1970: TimeInterval(bedTime)),
             wakeTime: Date(timeIntervalSince1970: TimeInterval(wakeTime)),
-            isFinished: !stillAsleep,
+            isFinished: hasWokenUp,
             segments: readSegments(from: &reader)
         )
     }
@@ -124,29 +135,83 @@ public enum SleepDetails {
     }
 
     /// The packet area is not fully understood, so a malformed tail ends the
-    /// reading and keeps the stages found so far.
+    /// reading and keeps what was found so far. Stages come from the stage
+    /// packets; when the band sent none (it does not stage every sleep), the
+    /// fell-asleep and woke-up events give the asleep periods instead.
     private static func readSegments(from reader: inout ByteReader) -> [SleepSegment] {
-        var segments: [SleepSegment] = []
+        var staged: [SleepSegment] = []
+        var events: [(time: Date, fellAsleep: Bool)] = []
         while let packet = try? nextPacket(from: &reader) {
-            guard packet.type == stagesPacket else { continue }
-            segments.append(contentsOf: decodeStages(packet.data, startingAt: packet.timestamp))
+            switch packet.type {
+            case stagesPacket:
+                staged.append(contentsOf: decodeStages(packet.data, startingAt: packet.time))
+            case fellAsleepPacket, wokeUpPacket:
+                events.append((packet.time, packet.type == fellAsleepPacket))
+            default:
+                break
+            }
         }
-        return segments
+        return staged.isEmpty ? segments(from: events) : staged
+    }
+
+    /// Pairs each fell-asleep event with the next woke-up event; the time between
+    /// two asleep periods of the same sleep counts as awake.
+    private static func segments(from events: [(time: Date, fellAsleep: Bool)]) -> [SleepSegment] {
+        var asleep: [SleepSegment] = []
+        var sleepStart: Date?
+        for event in events.sorted(by: { $0.time < $1.time }) {
+            if event.fellAsleep {
+                sleepStart = sleepStart ?? event.time
+            } else if let start = sleepStart, event.time > start {
+                asleep.append(SleepSegment(stage: .unspecified, start: start, end: event.time))
+                sleepStart = nil
+            }
+        }
+        let distinct = asleep.reduce(into: [SleepSegment]()) { kept, segment in
+            if !kept.contains(segment) { kept.append(segment) }
+        }
+        var result: [SleepSegment] = []
+        for segment in distinct {
+            if let previous = result.last, segment.start > previous.end,
+               segment.start.timeIntervalSince(previous.end) <= longestAwakeGap {
+                result.append(SleepSegment(stage: .awake, start: previous.end, end: segment.start))
+            }
+            result.append(segment)
+        }
+        return result
     }
 
     private static func nextPacket(
         from reader: inout ByteReader
-    ) throws(ActivityParseError) -> (type: UInt8, timestamp: UInt64, data: Data)? {
+    ) throws(ActivityParseError) -> (type: UInt8, time: Date, data: Data)? {
         guard try seekMarker(in: &reader) else { return nil }
         try reader.skip(1)
         let timestamp = try reader.uint64()
         try reader.skip(1)
         let type = try reader.byte()
         let length = Int(try reader.bigEndianUInt16())
-        if packetsWithoutData.contains(type) {
-            return (type, timestamp, Data())
+        let time = Date(timeIntervalSince1970: seconds(fromPacketTimestamp: timestamp))
+        // Several packet types use the length field for flags and carry no data:
+        // a marker right after the header shows it, whatever the type.
+        if packetsWithoutData.contains(type) || startsWithMarker(reader) {
+            return (type, time, Data())
         }
-        return (type, timestamp, Data(try reader.take(length)))
+        return (type, time, Data(try reader.take(length)))
+    }
+
+    /// Packet timestamps come in seconds, milliseconds or nanoseconds depending
+    /// on the packet type.
+    private static func seconds(fromPacketTimestamp value: UInt64) -> TimeInterval {
+        switch value {
+        case 100_000_000_000_000_000...: TimeInterval(value / 1_000_000_000)
+        case 100_000_000_000...: TimeInterval(value / 1_000)
+        default: TimeInterval(value)
+        }
+    }
+
+    private static func startsWithMarker(_ reader: ByteReader) -> Bool {
+        var copy = reader
+        return (try? copy.uint32()) == packetMarker
     }
 
     private static func seekMarker(in reader: inout ByteReader) throws(ActivityParseError) -> Bool {
@@ -160,10 +225,10 @@ public enum SleepDetails {
     }
 
     /// Each entry is a big-endian pair `stage (4 bits) | minutes (12 bits)`.
-    private static func decodeStages(_ data: Data, startingAt timestamp: UInt64) -> [SleepSegment] {
+    private static func decodeStages(_ data: Data, startingAt time: Date) -> [SleepSegment] {
         var reader = ByteReader(data)
         var segments: [SleepSegment] = []
-        var start = Date(timeIntervalSince1970: TimeInterval(timestamp))
+        var start = time
         while let entry = try? reader.bigEndianUInt16() {
             let end = start.addingTimeInterval(TimeInterval(entry & durationMask) * secondsPerMinute)
             if let stage = stage(code: entry >> stageShift), end > start {

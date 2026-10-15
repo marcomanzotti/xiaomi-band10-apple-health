@@ -163,7 +163,8 @@ struct ActivitySyncTests {
 
     @Test("keeps a night still in progress on the band, so that the complete night comes later")
     func doesNotAcknowledgeUnfinishedNight() throws {
-        let night = Data(hex: "00" + "01") + Data(hex: "00f15365") + Data(hex: "10f15365")
+        // Woke-up flag 0: the band still records this night.
+        let night = Data(hex: "00" + "00") + Data(hex: "00f15365") + Data(hex: "10f15365")
         let unfinished = try makeActivityFile(try activityID(FileFlags.sleep, version: 2), content: night)
         var sync = ActivitySync()
         started(&sync, today: [unfinished.id])

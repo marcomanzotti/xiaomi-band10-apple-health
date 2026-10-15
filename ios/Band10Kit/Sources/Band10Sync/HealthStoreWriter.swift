@@ -144,6 +144,7 @@ public struct HealthStoreWriter: Sendable {
         case .light: .asleepCore
         case .deep: .asleepDeep
         case .rem: .asleepREM
+        case .unspecified: .asleepUnspecified
         }
     }
 }
