@@ -69,7 +69,9 @@ public final class BandSyncEngine: ObservableObject {
     /// How many data types Health allowed at the last import.
     private static let allowedTypesKey = "allowedHealthTypes"
     private static let writerVersionKey = "healthWriterVersion"
-    private static let writerVersion = 2
+    /// 3: a night is written as the band's last scoring only, after clearing
+    /// the overlapping stages earlier versions wrote.
+    private static let writerVersion = 3
     /// `--band-set-authkey <32 hex digits>` stores a key at launch, so that a Mac
     /// can hand over a new key without typing it on the phone.
     private static let setKeyArgument = "--band-set-authkey"
@@ -535,8 +537,8 @@ public final class BandSyncEngine: ObservableObject {
         guard configuration.writesToHealth, case .answered(let allowed, _) = healthAccess else { return }
         let previous = defaults.integer(forKey: Self.allowedTypesKey)
         defaults.set(allowed, forKey: Self.allowedTypesKey)
-        // Version 2 writes every type and trusts only Health's own refusals:
-        // files imported by the first version are written once more.
+        // A newer writer (2: every type, Health's own refusals; 3: one scoring
+        // per night) writes the files an older one imported once more.
         let writerVersion = defaults.integer(forKey: Self.writerVersionKey)
         defaults.set(Self.writerVersion, forKey: Self.writerVersionKey)
         guard allowed > previous || writerVersion < Self.writerVersion else { return }
@@ -580,6 +582,9 @@ public final class BandSyncEngine: ObservableObject {
             defer { if result.written > 0 { wroteToHealth = true } }
             if configuration.writesToHealth {
                 do {
+                    if case .sleep(let session) = content {
+                        try await writer.clearSleep(from: session.bedTime, to: session.wakeTime)
+                    }
                     result = try await writer.write(samples)
                 } catch {
                     note("Salute non scrivibile ora (\(error.localizedDescription)), riprovo più tardi")

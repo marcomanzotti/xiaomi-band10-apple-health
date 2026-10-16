@@ -138,13 +138,20 @@ public enum SleepDetails {
     /// reading and keeps what was found so far. Stages come from the stage
     /// packets; when the band sent none (it does not stage every sleep), the
     /// fell-asleep and woke-up events give the asleep periods instead.
+    ///
+    /// Through the night the band re-scores the whole sleep about every half
+    /// hour and appends the new scoring as one more stage packet starting again
+    /// at bed time (a Band 10 night held 12 of them). Only the last one is the
+    /// band's verdict: stacking them gave 79 hours of overlapping stages for a
+    /// 10-hour night.
     private static func readSegments(from reader: inout ByteReader) -> [SleepSegment] {
         var staged: [SleepSegment] = []
         var events: [(time: Date, fellAsleep: Bool)] = []
         while let packet = try? nextPacket(from: &reader) {
             switch packet.type {
             case stagesPacket:
-                staged.append(contentsOf: decodeStages(packet.data, startingAt: packet.time))
+                let scoring = decodeStages(packet.data, startingAt: packet.time)
+                if !scoring.isEmpty { staged = scoring }
             case fellAsleepPacket, wokeUpPacket:
                 events.append((packet.time, packet.type == fellAsleepPacket))
             default:

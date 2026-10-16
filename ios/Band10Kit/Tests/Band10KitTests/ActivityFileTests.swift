@@ -353,6 +353,25 @@ struct SleepTests {
         ])
     }
 
+    @Test("keeps only the band's last scoring of the night")
+    func keepsLastScoring() throws {
+        // The band re-scores the night from bed time: light 30 then (later) light 20 + deep 25.
+        let early = packet(type: 17, timestamp: bedTime, lengthField: 2, data: Data(hex: "101e"))
+        let late = packet(type: 17, timestamp: bedTime, lengthField: 4, data: Data(hex: "1014" + "2019"))
+        let empty = packet(type: 17, timestamp: bedTime, lengthField: 0)
+        let file = try makeActivityFile(
+            try activityID(FileFlags.sleep, version: 5), content: detailsContent(packets: early + late + empty)
+        )
+
+        let segments = try SleepDetails.parse(file).segments
+
+        let start = Date(timeIntervalSince1970: TimeInterval(bedTime))
+        #expect(segments == [
+            SleepSegment(stage: .light, start: start, end: start.addingTimeInterval(1200)),
+            SleepSegment(stage: .deep, start: start.addingTimeInterval(1200), end: start.addingTimeInterval(2700)),
+        ])
+    }
+
     @Test("advances past a stage it cannot name without recording it")
     func skipsUnknownStage() throws {
         // Light 10 min, "not asleep" (4) 5 min, REM 10 min.

@@ -105,6 +105,21 @@ public struct HealthStoreWriter: Sendable {
         return result
     }
 
+    /// Removes the band's own sleep samples inside a night before that night is
+    /// written again: a re-scored night moves its stage boundaries, so samples
+    /// keyed by their start would otherwise pile up next to the new ones.
+    /// Matched by this app as source and the band as device, so sleep recorded
+    /// by any other device is never touched.
+    public func clearSleep(from start: Date, to end: Date) async throws {
+        let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            HKQuery.predicateForSamples(withStart: start, end: end, options: []),
+            HKQuery.predicateForObjects(from: HKSource.default()),
+            HKQuery.predicateForObjects(withDeviceProperty: HKDevicePropertyKeyModel,
+                                        allowedValues: [Self.device.model ?? ""]),
+        ])
+        _ = try await store.deleteObjects(of: HKCategoryType(.sleepAnalysis), predicate: predicate)
+    }
+
     private func object(for sample: HealthSample) -> HKSample? {
         let metadata: [String: Any] = [
             HKMetadataKeySyncIdentifier: sample.syncIdentifier,
