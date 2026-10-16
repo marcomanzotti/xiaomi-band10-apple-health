@@ -131,7 +131,7 @@ public final class BandSyncEngine: ObservableObject {
             phase = .needsKey
             return
         }
-        note("avvio")
+        note("started")
         let link = BandLink(restoreIdentifier: configuration.restoreIdentifier, defaults: defaults) { [weak self] event in
             self?.handle(event)
         }
@@ -151,13 +151,13 @@ public final class BandSyncEngine: ObservableObject {
         notificationObservers.forEach(NotificationCenter.default.removeObserver)
         notificationObservers = []
         phase = hasKey ? .stopped : .needsKey
-        note("fermato")
+        note("stopped")
     }
 
     /// Downloads at once, without waiting for the interval.
     public func syncNow() {
         guard cipher != nil else {
-            note("sincronizzazione richiesta ma la band non è collegata")
+            note("sync requested, but the band is not connected")
             return
         }
         startSync()
@@ -165,7 +165,7 @@ public final class BandSyncEngine: ObservableObject {
 
     public func setAuthKey(hex: String) throws {
         try keychain.saveAuthKey(hex: hex)
-        note("chiave salvata")
+        note("key saved")
         stop()
         start()
     }
@@ -180,7 +180,7 @@ public final class BandSyncEngine: ObservableObject {
         do {
             try await writer.requestAccess()
         } catch {
-            note("permesso Salute non ottenuto: \(error.localizedDescription)")
+            note("Health permission not granted: \(error.localizedDescription)")
         }
         healthAccess = writer.access
         await importPending()
@@ -212,9 +212,9 @@ public final class BandSyncEngine: ObservableObject {
         }
         do {
             try keychain.saveAuthKey(hex: arguments[index + 1])
-            note("chiave ricevuta all'avvio e salvata")
+            note("key received at launch and saved")
         } catch {
-            note("chiave ricevuta all'avvio non valida")
+            note("key received at launch is not valid")
         }
     }
 
@@ -275,7 +275,7 @@ public final class BandSyncEngine: ObservableObject {
         // A repeated session confirmation must not restart a handshake or a live session.
         guard authenticator == nil, cipher == nil else { return }
         if let pausedUntil, pausedUntil > Date() {
-            note("in pausa fino alle \(pausedUntil.formatted(date: .omitted, time: .shortened)) dopo vari errori")
+            note("paused until \(pausedUntil.formatted(date: .omitted, time: .shortened)) after repeated errors")
             armTimer(.seconds(pausedUntil.timeIntervalSinceNow)) { [weak self] in
                 self?.link?.reopenSession()
             }
@@ -290,20 +290,20 @@ public final class BandSyncEngine: ObservableObject {
             return
         case .failure:
             // Retried when the phone is unlocked (see `observeApplication`).
-            note("Portachiavi non ancora leggibile: attendo lo sblocco")
+            note("Keychain not readable yet: waiting for the phone to be unlocked")
             return
         }
         do {
             authenticator = try Authenticator(authKey: key, companion: companion)
         } catch {
-            note("chiave non utilizzabile")
+            note("the stored key cannot be used")
             phase = .keyRejected
             return
         }
         phase = .authenticating
         beginBackgroundTime()
         armTimer(Timing.authenticationTimeout) { [weak self] in
-            self?.note("la band non completa l'autenticazione")
+            self?.note("the band did not complete authentication")
             self?.registerFailure()
             self?.link?.reopenSession()
         }
@@ -327,13 +327,13 @@ public final class BandSyncEngine: ObservableObject {
 
     private func handleHandshake(_ body: Data) {
         guard let reply = try? AuthReply.parse(body) else {
-            note("risposta di autenticazione illeggibile")
+            note("unreadable authentication reply")
             return
         }
         switch reply {
-        case .deviceVerify: note("band: numero casuale e prova ricevuti")
-        case .accepted: note("band: prova del telefono accettata")
-        case .rejected(let subtype, let status): note("band: rifiuto (sottotipo \(subtype), stato \(status))")
+        case .deviceVerify: note("band: nonce and proof received")
+        case .accepted: note("band: phone proof accepted")
+        case .rejected(let subtype, let status): note("band: rejected (subtype \(subtype), status \(status))")
         }
         perform(authenticator?.handle(reply) ?? [])
     }
@@ -347,11 +347,11 @@ public final class BandSyncEngine: ObservableObject {
                 didAuthenticate(cipher)
             case .failed(let failure):
                 replyTimer?.cancel()
-                note("autenticazione fallita: \(failure)")
+                note("authentication failed: \(failure)")
                 if failure == .keyMismatch, !hasRetriedMismatch {
                     hasRetriedMismatch = true
                     authenticator = nil
-                    note("riprovo una volta con una sessione nuova")
+                    note("retrying once with a new session")
                     link?.reopenSession()
                 } else if failure == .keyMismatch || failure == .invalidAuthKey {
                     phase = .keyRejected
@@ -373,7 +373,7 @@ public final class BandSyncEngine: ObservableObject {
         authenticator = nil
         hasRetriedMismatch = false
         phase = .connected
-        note("autenticata")
+        note("authenticated")
         sendEncrypted(SystemCommand.setClock(to: Date(), in: .current, usesTwelveHourFormat: Self.usesTwelveHourClock))
         sendEncrypted(SystemCommand.batteryRequest)
         if isSyncDue {
@@ -399,7 +399,7 @@ public final class BandSyncEngine: ObservableObject {
         guard let header = try? CommandHeader.parse(body) else {
             unreadableCommands += 1
             guard unreadableCommands >= Self.unreadableCommandsBeforeReauthentication else { return }
-            note("la band usa chiavi di un'altra sessione (un'altra app?): mi riautentico")
+            note("the band uses keys of another session (another app?): authenticating again")
             unreadableCommands = 0
             registerFailure()
             endSession()
@@ -451,7 +451,7 @@ public final class BandSyncEngine: ObservableObject {
             case .store(let file):
                 guard save(file) else {
                     // Without a copy on disk the band must keep the file.
-                    finishSync(result: "interrotta: impossibile salvare i file")
+                    finishSync(result: "interrupted: files could not be saved")
                     return
                 }
             case .finished(let summary):
@@ -475,7 +475,7 @@ public final class BandSyncEngine: ObservableObject {
             try store.save(file)
             return true
         } catch {
-            note("salvataggio di \(file.id) fallito: \(error.localizedDescription)")
+            note("saving \(file.id) failed: \(error.localizedDescription)")
             return false
         }
     }
@@ -492,7 +492,7 @@ public final class BandSyncEngine: ObservableObject {
         replyTimer?.cancel()
         sync = nil
         lastResult = result
-        note("sincronizzazione: \(result)")
+        note("sync: \(result)")
         if cipher != nil {
             phase = .connected
         }
@@ -503,11 +503,11 @@ public final class BandSyncEngine: ObservableObject {
     }
 
     private func describe(_ summary: ActivitySync.Summary) -> String {
-        var parts = ["\(summary.received) file ricevuti"]
-        if summary.failed > 0 { parts.append("\(summary.failed) non arrivati") }
-        if summary.kept > 0 { parts.append("\(summary.kept) lasciati sulla band (illeggibili o notte in corso)") }
-        if summary.unsupported > 0 { parts.append("\(summary.unsupported) allenamenti lasciati sulla band") }
-        if !summary.isComplete { parts.append("la band non ha risposto a un elenco") }
+        var parts = ["\(summary.received) files received"]
+        if summary.failed > 0 { parts.append("\(summary.failed) not received") }
+        if summary.kept > 0 { parts.append("\(summary.kept) left on the band (unreadable or night in progress)") }
+        if summary.unsupported > 0 { parts.append("\(summary.unsupported) workouts left on the band") }
+        if !summary.isComplete { parts.append("the band did not answer a listing") }
         return parts.joined(separator: ", ")
     }
 
@@ -544,9 +544,9 @@ public final class BandSyncEngine: ObservableObject {
         guard allowed > previous || writerVersion < Self.writerVersion else { return }
         do {
             try store.requeueImported()
-            note("permessi di Salute ampliati: riscrivo i dati già scaricati")
+            note("more Health permissions: writing the downloaded data again")
         } catch {
-            note("impossibile rimettere in coda i file già importati: \(error.localizedDescription)")
+            note("cannot queue the imported files again: \(error.localizedDescription)")
         }
     }
 
@@ -555,13 +555,13 @@ public final class BandSyncEngine: ObservableObject {
         requeueIfMoreTypesAllowed(store)
         let switchedOff = writer.switchedOffTypes
         if configuration.writesToHealth, !switchedOff.isEmpty {
-            note("secondo iOS il permesso è spento per \(switchedOff.joined(separator: ", ")): provo comunque")
+            note("iOS reports no permission for \(switchedOff.joined(separator: ", ")): trying anyway")
         }
         let files = (try? store.pendingFiles()) ?? []
         pendingFileCount = files.count
         guard !files.isEmpty else { return }
         guard !configuration.writesToHealth || healthAccess != .notRequested else {
-            note("\(files.count) file in attesa del permesso di Salute")
+            note("\(files.count) files waiting for the Health permission")
             return
         }
         var wroteToHealth = false
@@ -573,7 +573,7 @@ public final class BandSyncEngine: ObservableObject {
             do {
                 content = try ActivityContent.decode(file)
             } catch {
-                note("file \(file.id) illeggibile (\(error)), messo da parte")
+                note("file \(file.id) unreadable (\(error)), set aside")
                 try? store.markRejected(file.id)
                 continue
             }
@@ -587,12 +587,12 @@ public final class BandSyncEngine: ObservableObject {
                     }
                     result = try await writer.write(samples)
                 } catch {
-                    note("Salute non scrivibile ora (\(error.localizedDescription)), riprovo più tardi")
+                    note("Health cannot be written now (\(error.localizedDescription)), retrying later")
                     break
                 }
             }
-            let refusals = result.refusals.isEmpty ? "" : ", Salute rifiuta: \(result.refusals.joined(separator: ", "))"
-            note("\(file.id.kind): \(ContentDescription.describe(content)), \(result.written) valori scritti in Salute\(refusals)")
+            let refusals = result.refusals.isEmpty ? "" : ", Health refused: \(result.refusals.joined(separator: ", "))"
+            note("\(file.id.kind): \(ContentDescription.describe(content)), \(result.written) values written to Health\(refusals)")
             if (try? store.markImported(file)) != true {
                 importRequestedAgain = true
             }
@@ -615,7 +615,7 @@ public final class BandSyncEngine: ObservableObject {
         guard consecutiveFailures >= Timing.failuresBeforeBackoff else { return }
         pausedUntil = Date().addingTimeInterval(Timing.backoff)
         consecutiveFailures = 0
-        note("troppi errori di fila: pausa di \(Int(Timing.backoff / 60)) minuti")
+        note("too many errors in a row: pausing \(Int(Timing.backoff / 60)) minutes")
     }
 
     private func armTimer(_ delay: Duration, _ action: @escaping @MainActor () -> Void) {
@@ -692,17 +692,17 @@ enum ContentDescription {
         case .minutes(let minutes):
             let steps = minutes.compactMap(\.steps).reduce(0, +)
             let heartRates = minutes.compactMap(\.heartRate).count
-            return "\(minutes.count) minuti, \(steps) passi, \(heartRates) battiti"
+            return "\(minutes.count) minutes, \(steps) steps, \(heartRates) heart rates"
         case .summary:
-            return "riepilogo del giorno"
+            return "daily summary"
         case .sleep(let session):
-            let state = session.isFinished ? "concluso" : "in corso"
-            return "sonno di \(Int(session.wakeTime.timeIntervalSince(session.bedTime) / 60)) min, "
-                + "\(session.segments.count) fasi, \(state)"
+            let state = session.isFinished ? "finished" : "in progress"
+            return "sleep of \(Int(session.wakeTime.timeIntervalSince(session.bedTime) / 60)) min, "
+                + "\(session.segments.count) segments, \(state)"
         case .manualSamples(let samples):
-            return "\(samples.count) misure manuali"
+            return "\(samples.count) spot measurements"
         case .empty:
-            return "vuoto"
+            return "empty"
         }
     }
 }

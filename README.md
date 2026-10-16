@@ -1,98 +1,107 @@
-# Band 10 → Apple Health
+# Xiaomi Band → Apple Health, without Mi Fitness
 
-Talk to a **Xiaomi Smart Band 10 directly over Bluetooth** from an iPhone, with
-no Mi Fitness and no Xiaomi cloud in the data path, and write everything the
-band records into Apple Health: **steps, active energy, distance, heart rate,
-resting heart rate, SpO₂ and sleep stages** (Light / Deep / REM / Awake).
+Keep the data of your Xiaomi Smart Band for yourself. This project talks to
+the band **directly over Bluetooth** and writes what it records into
+**Apple Health** (or, on Android, **Health Connect**), with no Xiaomi app and
+no Xiaomi cloud in the data path.
 
-The sync runs on its own in the background, the way the vendor app does: the
-phone stays connected to the band, downloads new data on every reconnection
-and then about every 15 minutes, and writes it to Health as soon as Health can
-be written (it queues while the phone is locked).
+| What the band records | Where it goes |
+|---|---|
+| Steps, active energy, walking distance | Apple Health, minute by minute |
+| Heart rate, resting heart rate | Apple Health |
+| Blood oxygen (SpO₂), including spot checks | Apple Health |
+| Sleep (asleep / awake, and stages when the band computes them) | Apple Health |
 
-## How it works
+On the iPhone the sync runs by itself in the background, the way the vendor
+app does: the phone stays connected, downloads new data every time the band
+comes back into range and then about every 15 minutes, and writes it to
+Health as soon as Health can be written.
 
-```
-Band 10 ──BLE (FE95, encrypted)──▶ Band10Sync (iOS) ──▶ disk queue ──▶ Apple Health
-```
+> **Status:** verified on a **Xiaomi Smart Band 10**. Other recent Xiaomi
+> bands and watches use the same protocol family and *may* work, but have not
+> been tested — see [supported devices](docs/supported-devices.md) and please
+> report what happens with yours.
 
-- **`ios/Band10Kit/`** — Swift package.
-  - `Band10Kit`: the band protocol with no platform code — frame codec, CRC,
-    session keys (HKDF), AES-CTR/CCM, protobuf messages, pairing and
-    authentication, the activity-file download sequence, and parsers for the
-    band's files (per-minute activity, daily summary, sleep, sleep stages,
-    spot measurements). Fully unit-tested.
-  - `Band10Sync`: what an app embeds — CoreBluetooth link with state
-    restoration, the sync engine, an on-disk queue, the HealthKit writer
-    (deduplicated through sync identifiers) and a SwiftUI settings screen.
-- **`ios/Band10Health/`** — a test app used to probe the band. It never writes
-  to Health. The real sync is meant to live in your own app (the author uses
-  it inside FitTracker).
-- **`fetcher/`** — Python tools for the one step that still needs Xiaomi (see
-  below).
+## Quick start
 
-## The one step that needs Xiaomi
+You need the band's **auth key**: a 32-digit code created when the band is
+paired. The Band 10 can only be paired through Xiaomi's servers, so Xiaomi
+creates the key once; after that, nothing goes to Xiaomi.
 
-Every session with the band is authenticated with a 16-byte key created when
-the band is paired. The Band 10 only accepts *server-assisted* pairing, so the
-key is created by Xiaomi's servers once per pairing:
+**1. Pair the band with Mi Fitness once** (the official app, on any phone).
 
-1. Pair the band with Mi Fitness once.
-2. Fetch the key from your account with `fetcher/scripts/fetch_band_key.py`
-   (it replays Mi Fitness's device-list call; capture how-to in
-   `fetcher/scripts/capture_help.md`). The key is written to a file readable
-   only by you and is never printed.
-3. Give the key to the app (settings screen, or launch argument
-   `--band-set-authkey` from a Mac). It is kept in the Keychain, on that phone
-   only.
-4. Close Mi Fitness for good (or delete it): two apps cannot share the band's
-   session.
+**2. Get the key** — on a Mac or PC with Python 3 (preinstalled on macOS):
 
-After that, nothing goes to Xiaomi. Pairing the band again changes the key.
-
-## Status
-
-| Part | State |
-|------|-------|
-| Transport, encryption, authentication | ✅ verified on a real band |
-| Key retrieval from the Xiaomi account | ✅ |
-| Activity download + file parsers | ✅ unit-tested against the Gadgetbridge layouts; first run on a real band pending |
-| HealthKit writer, background sync | ✅ builds; first run on a real band pending |
-| Workouts | ❌ left on the band for now |
-| Weather, notifications, alarms on the band | ❌ not served |
-
-Running tests (outside an iCloud-synced folder for the build products):
-
-```bash
-cd ios/Band10Kit
-swift test --scratch-path ~/.cache/band10kit-build
+```sh
+git clone https://github.com/marcomanzotti/xiaomi-band10-apple-health.git
+cd xiaomi-band10-apple-health
+python3 tools/band-key/get_band_key.py --save band.key
 ```
 
-### Lessons learned
+Log in with your Xiaomi account (and the code Xiaomi emails you). The key is
+printed and saved to `band.key`, readable only by you.
+More options: [getting the key](docs/get-the-key.md).
 
-- Introduce the phone as **iOS** in the authentication step. Declaring an
-  Android phone over Bluetooth LE made the band stop listening on LE and drop
-  off until a factory reset (Android phones use Bluetooth Classic with it).
-  AstroBox does the same: iOS over LE, Android over Classic.
-- A bound band silently drops any unauthenticated request.
+**3a. iPhone** — on a Mac with Xcode and your Apple ID added in Xcode, plug in
+the iPhone and run:
 
-## Legal & disclaimer
+```sh
+ios/install.sh --key band.key
+```
 
-Personal-use tool for **your own** band, **your own** account and **your own**
-health data. Unofficial; not affiliated with or endorsed by Xiaomi or Apple.
-Use at your own risk.
+Open **Band Sync** on the iPhone, allow Bluetooth, tap *Allow writing to
+Health* → *Turn On All*. Details and the 7-day reinstall: [iPhone guide](docs/iphone.md).
 
-## Credits
+**3b. Android** — use [Gadgetbridge](https://gadgetbridge.org) with the same
+key and turn on its Health Connect integration: [Android guide](docs/android.md).
 
-- Band protocol and file layouts: [Gadgetbridge](https://gadgetbridge.org) (AGPL-3.0).
-- Companion-device field names and the iOS-over-LE convention: [AstroBox](https://github.com/AstralSightStudios) (AGPL-3.0).
-- Pairing protocol: static analysis of Mi Fitness with [REA](https://github.com/morluto/rea).
-- Xiaomi account login + RC4 crypto: [huami-token](https://codeberg.org/argrento/huami-token/) by Kirill Snezhko (MIT).
+**4. Delete Mi Fitness** from the phone. The band stays paired and the key
+keeps working; two apps cannot share the band.
+
+## What is in this repository
+
+| Path | What it is |
+|---|---|
+| [`tools/band-key/`](tools/band-key) | Gets the band key from your own Xiaomi account. Standard-library Python, no install. Also a mitmproxy add-on as a fallback. |
+| [`ios/Band10Kit/`](ios/Band10Kit) | Swift package. `Band10Kit`: the band protocol and file formats, no platform code, 200+ tests. `Band10Sync`: Bluetooth link, background sync engine, Health writer and settings screen, ready to embed in any iOS app. |
+| [`ios/Band10Health/`](ios/Band10Health) | **Band Sync**, a minimal iPhone app built on `Band10Sync`. |
+| [`ios/install.sh`](ios/install.sh) | Builds and installs Band Sync on a connected iPhone. |
+| [`docs/`](docs) | Guides, and [how it works](docs/how-it-works.md): the full protocol, from Bluetooth frames to sleep files. |
+
+## Privacy
+
+- The key and your data stay on your devices. The key tool talks only to
+  `account.xiaomi.com` (to log in) and to the Xiaomi health server of your
+  region (to read the device list), exactly like Mi Fitness does, and stores
+  nothing unless you pass `--save`.
+- The iPhone app keeps the key in the Keychain of that phone only, and the
+  downloaded files in its own sandbox until they are in Health.
+- Anyone with your key can read your band: keep `band.key` private and never
+  commit it (it is ignored by git here).
+
+## Limits
+
+- **iPhone:** an app is required (only apps can write to Health). With a free
+  Apple ID it must be reinstalled every 7 days; a paid developer account
+  removes that.
+- **Workouts** recorded on the band are not imported yet; they stay on the band.
+- **HRV** is not available from the band on the files seen so far.
+- Weather, notifications and alarms on the band are not served.
+- Pairing the band again creates a new key: run the key tool again.
+
+## Thanks
+
+Built on the work of [Gadgetbridge](https://gadgetbridge.org) (protocol and file
+layouts), [AstroBox](https://github.com/AstralSightStudios) (iOS companion
+convention), [huami-token](https://codeberg.org/argrento/huami-token/) (Xiaomi
+cloud crypto) and [Xiaomi-cloud-tokens-extractor](https://github.com/PiotrMachowski/Xiaomi-cloud-tokens-extractor)
+(login verification). See [third-party notices](THIRD_PARTY_NOTICES.md).
+
+Not affiliated with or endorsed by Xiaomi or Apple. For your own band, your
+own account and your own data. Use at your own risk.
 
 ## License
 
-AGPL-3.0-or-later — see [LICENSE](LICENSE). Copyright (c) 2026 Marco Manzotti.
-
-The project was MIT-licensed up to commit `d41bc7c`. It moved to the AGPL so the
-band protocol code can build on Gadgetbridge, which is AGPL-3.0. The vendored
-huami-token code under `fetcher/band10/vendor_huami/` keeps its own MIT notice.
+[AGPL-3.0-or-later](LICENSE), because the protocol code builds on Gadgetbridge
+(AGPL-3.0). The tools under `tools/band-key/` include MIT-licensed code, see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

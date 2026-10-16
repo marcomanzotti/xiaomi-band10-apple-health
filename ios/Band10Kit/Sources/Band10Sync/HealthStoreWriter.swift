@@ -56,13 +56,13 @@ public struct HealthStoreWriter: Sendable {
 
     private static func name(of type: HKSampleType) -> String {
         switch type {
-        case HKQuantityType(.stepCount): "passi"
-        case HKQuantityType(.activeEnergyBurned): "energia attiva"
-        case HKQuantityType(.distanceWalkingRunning): "distanza"
-        case HKQuantityType(.heartRate): "battito"
-        case HKQuantityType(.restingHeartRate): "battito a riposo"
+        case HKQuantityType(.stepCount): "steps"
+        case HKQuantityType(.activeEnergyBurned): "active energy"
+        case HKQuantityType(.distanceWalkingRunning): "distance"
+        case HKQuantityType(.heartRate): "heart rate"
+        case HKQuantityType(.restingHeartRate): "resting heart rate"
         case HKQuantityType(.oxygenSaturation): "SpO₂"
-        case HKCategoryType(.sleepAnalysis): "sonno"
+        case HKCategoryType(.sleepAnalysis): "sleep"
         default: type.identifier
         }
     }

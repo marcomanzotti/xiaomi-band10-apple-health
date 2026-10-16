@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Band10Kit",
+    defaultLocalization: "en",
     platforms: [.iOS(.v16), .macOS(.v13)],
     products: [
         // The band's protocol and file formats: no Bluetooth, no HealthKit.
@@ -12,7 +13,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "Band10Kit"),
-        .target(name: "Band10Sync", dependencies: ["Band10Kit"]),
+        .target(name: "Band10Sync", dependencies: ["Band10Kit"], resources: [.process("Resources")]),
         .testTarget(name: "Band10KitTests", dependencies: ["Band10Kit"]),
         .testTarget(name: "Band10SyncTests", dependencies: ["Band10Sync"]),
     ]

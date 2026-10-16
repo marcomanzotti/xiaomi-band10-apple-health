@@ -81,7 +81,7 @@ final class BandLink: NSObject {
         do {
             enqueue(try link.dataFrame(payload))
         } catch {
-            onEvent(.log("pacchetto non codificabile: \(error)"))
+            onEvent(.log("cannot encode a packet: \(error)"))
         }
     }
 
@@ -151,7 +151,7 @@ final class BandLink: NSObject {
         do {
             enqueue(try link.sessionRequestFrame())
         } catch {
-            onEvent(.log("richiesta di sessione non codificabile: \(error)"))
+            onEvent(.log("cannot encode the session request: \(error)"))
         }
     }
 
@@ -179,11 +179,11 @@ final class BandLink: NSObject {
             case .acknowledged:
                 break
             case .rejected(let sequence):
-                onEvent(.log("la band rifiuta il pacchetto \(sequence)"))
+                onEvent(.log("the band rejected packet \(sequence)"))
             case .discarded(let byteCount, let reason):
-                onEvent(.log("scartati \(byteCount) byte: \(reason)"))
+                onEvent(.log("dropped \(byteCount) bytes: \(reason)"))
             case .malformedPayload(let sequence, let reason):
-                onEvent(.log("pacchetto \(sequence) illeggibile: \(reason)"))
+                onEvent(.log("unreadable packet \(sequence): \(reason)"))
             }
         }
     }
@@ -225,7 +225,7 @@ extension BandLink: @preconcurrency CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         guard central.state == .poweredOn else {
             if central.state != .unknown, central.state != .resetting {
-                onEvent(.unavailable("Bluetooth non disponibile (stato \(central.state.rawValue))"))
+                onEvent(.unavailable("Bluetooth unavailable (state \(central.state.rawValue))"))
             }
             return
         }
@@ -243,7 +243,7 @@ extension BandLink: @preconcurrency CBCentralManagerDelegate {
             return
         }
         // First contact: look for the band's advertisement.
-        onEvent(.log("band mai vista da questa app, la cerco"))
+        onEvent(.log("band never seen by this app, scanning for it"))
         central.scanForPeripherals(withServices: nil)
     }
 
@@ -270,11 +270,11 @@ extension BandLink: @preconcurrency CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-        reconnect(after: "connessione fallita: \(error?.localizedDescription ?? "errore sconosciuto")")
+        reconnect(after: "connection failed: \(error?.localizedDescription ?? "unknown error")")
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        reconnect(after: "disconnessa: \(error?.localizedDescription ?? "senza errore")")
+        reconnect(after: "disconnected: \(error?.localizedDescription ?? "no error")")
     }
 
     private func reconnect(after reason: String) {
@@ -289,7 +289,7 @@ extension BandLink: @preconcurrency CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard let service = peripheral.services?.first(where: { $0.uuid == Self.service }) else {
             // Disconnecting makes the system reconnect, and the discovery runs again.
-            onEvent(.log("servizio FE95 non trovato, ricollego"))
+            onEvent(.log("service FE95 not found, reconnecting"))
             central?.cancelPeripheralConnection(peripheral)
             return
         }
@@ -301,7 +301,7 @@ extension BandLink: @preconcurrency CBPeripheralDelegate {
         guard let receive = characteristics.first(where: { $0.uuid == Self.receiveCharacteristic }),
               let transmit = characteristics.first(where: { $0.uuid == Self.transmitCharacteristic })
         else {
-            onEvent(.log("caratteristiche di trasporto non trovate, ricollego"))
+            onEvent(.log("transport characteristics not found, reconnecting"))
             central?.cancelPeripheralConnection(peripheral)
             return
         }
@@ -315,7 +315,7 @@ extension BandLink: @preconcurrency CBPeripheralDelegate {
         error: Error?
     ) {
         if let error {
-            onEvent(.log("notifiche non attivabili: \(error.localizedDescription)"))
+            onEvent(.log("cannot enable notifications: \(error.localizedDescription)"))
             return
         }
         closeLeftoverSessionThenOpen()

@@ -1,0 +1,7 @@
+// Signing for your own iPhone. Do not edit: run `ios/install.sh` once, which
+// writes your Apple team and a bundle identifier to Signing.local.xcconfig
+// (ignored by git). Or set them here by hand if you build from Xcode.
+DEVELOPMENT_TEAM =
+PRODUCT_BUNDLE_IDENTIFIER = org.example.band10health
+
+#include? "Signing.local.xcconfig"

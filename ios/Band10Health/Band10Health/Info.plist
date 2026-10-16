@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Questa app si collega alla tua banda Xiaomi per leggerne i dati e scriverli in Apple Health.</string>
+	<string>Band Sync connects to your Xiaomi band over Bluetooth to copy what it records into Apple Health, also in the background.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Questa app legge i dati del sonno solo per evitare duplicati durante l'importazione.</string>
+	<string>Band Sync does not read your Health data. iOS asks for this text whenever an app writes to Health.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>Questa app scrive in Apple Health i dati dettagliati del sonno (fasi, frequenza cardiaca, SpO2, HRV, respirazione) esportati dalla tua banda Xiaomi.</string>
+	<string>Band Sync writes the steps, energy, distance, heart rate, blood oxygen and sleep recorded by your Xiaomi band into Apple Health.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>

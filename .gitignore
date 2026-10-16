@@ -1,28 +1,26 @@
+# Your own signing settings, written by ios/install.sh
+ios/Band10Health/Signing.local.xcconfig
+
+# Band keys: never commit them
+*.key
+band_authkey*
+
+# Traffic captures contain account tokens and personal data
+*.mitm
+capture/
+fetcher/
+
 # Python
-.venv/
 __pycache__/
 *.pyc
-probe_report.json
-sleep_export.json
+.venv/
 
-# Secrets — never commit credentials or tokens
-.env
-*.token
-mi_credentials*
-.mi_session.json
-
-# Captured traffic — contains real serviceToken / personal data
-fetcher/capture/
-*.mitm
-
-# macOS
-.DS_Store
-
-# Xcode
+# Xcode / SwiftPM
 ios/**/xcuserdata/
 ios/**/DerivedData/
 ios/**/*.xcuserstate
 build/
-
-# SwiftPM
 .build/
+
+# macOS
+.DS_Store
